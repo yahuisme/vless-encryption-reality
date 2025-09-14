@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # VLESS Encryption + REALITY 一键安装管理脚本
-# 版本: V1.7.0
+# 版本: V1.7.1
 # 固定配置: VLESS Encryption (native + 0-RTT + ML-KEM-768) + REALITY + xtls-rprx-vision
 
 set -e
 
 # --- 全局变量 ---
-SCRIPT_VERSION="V1.7.0"
+SCRIPT_VERSION="V1.7.1"
 xray_config_path="/usr/local/etc/xray/config.json"
 xray_binary_path="/usr/local/bin/xray"
 xray_install_script_url="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
@@ -518,7 +518,7 @@ view_subscription_info() {
         address_for_url="[${display_ip}]"
     fi
 
-    local vless_url="vless://${uuid}@${address_for_url}:${port}?encryption=${encryption}&security=reality&sni=${sni}&sid=${short_id}&pbk=${public_key}&flow=xtls-rprx-vision&type=tcp#${link_name_encoded}"
+    local vless_url="vless://${uuid}@${address_for_url}:${port}?encryption=${encryption}&security=reality&sni=${sni}&sid=${short_id}&fp=chrome&pbk=${public_key}&flow=xtls-rprx-vision&type=tcp#${link_name_encoded}"
 
     if [ "$is_quiet" = true ]; then
         echo "${vless_url}"
