@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # VLESS Encryption + REALITY 一键安装管理脚本
-# 版本: V1.6.7
+# 版本: V1.7.0
 # 固定配置: VLESS Encryption (native + 0-RTT + ML-KEM-768) + REALITY + xtls-rprx-vision
 
 set -e
 
 # --- 全局变量 ---
-SCRIPT_VERSION="V1.6.7"
+SCRIPT_VERSION="V1.7.0"
 xray_config_path="/usr/local/etc/xray/config.json"
 xray_binary_path="/usr/local/bin/xray"
 xray_install_script_url="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
@@ -94,7 +94,8 @@ get_public_ip_v6() {
 
 execute_official_script() {
     info "正在执行官方安装脚本..."
-    curl -sL "$xray_install_script_url" | bash -s -- "$1"
+    # 使用 "$@" 以便将所有参数正确地传递给子脚本
+    curl -sL "$xray_install_script_url" | bash -s -- "$@"
 }
 
 check_xray_version() {
@@ -250,13 +251,11 @@ generate_reality_keys() {
         return 1
     fi
 
-    # 优先尝试解析新版格式 (PrivateKey / Password)
     local private_key
     private_key=$(echo "$key_pair" | awk '/PrivateKey:/ {print $2}')
     local public_key
     public_key=$(echo "$key_pair" | awk '/Password:/ {print $2}')
 
-    # 如果解析失败，再尝试解析旧版格式 (Private key / Public key)
     if [ -z "$private_key" ] || [ -z "$public_key" ]; then
         info "尝试使用旧版格式解析密钥..."
         private_key=$(echo "$key_pair" | awk '/Private key:/ {print $3}')
@@ -336,12 +335,12 @@ update_xray() {
     fi
 
     info "开始更新..."
-    if ! execute_official_script "install"; then
+    if ! execute_official_script install; then
         error "Xray 核心更新失败！"
         return
     fi
     info "正在更新 Geo 数据文件..."
-    execute_official_script "install-geodata"
+    execute_official_script install-geodata
     if ! restart_xray; then
         return
     fi
@@ -384,7 +383,7 @@ uninstall_xray() {
     fi
 
     info "正在卸载 Xray..."
-    if execute_official_script "remove --purge"; then
+    if execute_official_script remove --purge; then
         rm -f "$client_vless_link_file" "$client_encryption_info_file" "$client_reality_info_file"
         success "Xray 已成功卸载。"
     else
@@ -508,8 +507,12 @@ view_subscription_info() {
         error "客户端配置信息不完整。"
         return
     fi
+    
+    local link_name_raw
+    link_name_raw="$(hostname) VLESS-E-reality"
+    local link_name_encoded
+    link_name_encoded=$(echo "$link_name_raw" | sed 's/ /%20/g')
 
-    local link_name_encoded="VLESS-E-R-V_$(hostname)"
     local address_for_url=$display_ip
     if [[ $display_ip == *":"* ]]; then
         address_for_url="[${display_ip}]"
@@ -523,16 +526,16 @@ view_subscription_info() {
         echo "${vless_url}" > "$client_vless_link_file"
         echo "----------------------------------------------------------------"
         cecho "$C_CYAN" " --- Xray VLESS-Encryption + REALITY + Vision 订阅信息 --- "
-        if [ -n "$ip4" ]; then
-            echo " 地址(IPv4): $(cecho "$C_PURPLE" "$ip4")"
-        fi
-        if [ -n "$ip6" ]; then
-            echo " 地址(IPv6): $(cecho "$C_PURPLE" "$ip6")"
-        fi
+        echo " 节点名称: $(cecho "$C_PURPLE" "$link_name_raw")"
+        if [ -n "$ip4" ]; then echo " 地址(IPv4): $(cecho "$C_PURPLE" "$ip4")"; fi
+        if [ -n "$ip6" ]; then echo " 地址(IPv6): $(cecho "$C_PURPLE" "$ip6")"; fi
         echo " 端口: $(cecho "$C_PURPLE" "$port")"
         echo " UUID: $(cecho "$C_PURPLE" "$uuid")"
-        echo " PublicKey(Password): $(cecho "$C_PURPLE" "$public_key")"
+        echo " PublicKey: $(cecho "$C_PURPLE" "$public_key")"
+        echo " 协议: $(cecho "$C_YELLOW" "VLESS Encryption")"
+        echo " 安全类型: $(cecho "$C_YELLOW" "reality")"
         echo " 流控: $(cecho "$C_YELLOW" "xtls-rprx-vision")"
+        echo " 指纹: $(cecho "$C_YELLOW" "chrome")"
         echo " SNI: $(cecho "$C_PURPLE" "$sni")"
         echo " Short ID: $(cecho "$C_PURPLE" "$short_id")"
         echo "----------------------------------------------------------------"
@@ -583,7 +586,8 @@ write_config() {
                     "xver": 0,
                     "serverNames": [$sni],
                     "privateKey": $private_key,
-                    "shortIds": [$short_id]
+                    "shortIds": [$short_id],
+                    "fingerprint": "chrome"
                 }
             }
         }],
@@ -600,13 +604,13 @@ run_install() {
     local port="$1" uuid="$2" sni="$3" short_id="$4"
 
     info "正在下载并安装 Xray 核心..."
-    if ! execute_official_script "install"; then
+    if ! execute_official_script install; then
         error "Xray 核心安装失败！"
         exit 1
     fi
 
     info "正在安装/更新 Geo 数据文件..."
-    execute_official_script "install-geodata"
+    execute_official_script install-geodata
 
     if ! check_xray_version; then
         error "安装的 Xray 版本不支持所需功能！"
@@ -676,35 +680,15 @@ main_menu() {
 
         local needs_pause=true
         case $choice in
-            1)
-                install_xray
-                ;;
-            2)
-                update_xray
-                ;;
-            3)
-                restart_xray
-                ;;
-            4)
-                uninstall_xray
-                ;;
-            5)
-                view_xray_log
-                needs_pause=false
-                ;;
-            6)
-                modify_config
-                ;;
-            7)
-                view_subscription_info
-                ;;
-            0)
-                success "感谢使用！"
-                exit 0
-                ;;
-            *)
-                error "无效选项。"
-                ;;
+            1) install_xray ;;
+            2) update_xray ;;
+            3) restart_xray ;;
+            4) uninstall_xray ;;
+            5) view_xray_log; needs_pause=false ;;
+            6) modify_config ;;
+            7) view_subscription_info ;;
+            0) success "感谢使用！"; exit 0 ;;
+            *) error "无效选项。" ;;
         esac
 
         if [ "$needs_pause" = true ]; then
@@ -742,26 +726,11 @@ main() {
 
         while [ $# -gt 0 ]; do
             case "$1" in
-                --port)
-                    port="$2"
-                    shift 2
-                    ;;
-                --uuid)
-                    uuid="$2"
-                    shift 2
-                    ;;
-                --sni)
-                    sni="$2"
-                    shift 2
-                    ;;
-                --quiet | -q)
-                    is_quiet=true
-                    shift
-                    ;;
-                *)
-                    error "未知参数: $1"
-                    exit 1
-                    ;;
+                --port) port="$2"; shift 2 ;;
+                --uuid) uuid="$2"; shift 2 ;;
+                --sni) sni="$2"; shift 2 ;;
+                --quiet | -q) is_quiet=true; shift ;;
+                *) error "未知参数: $1"; exit 1 ;;
             esac
         done
 
