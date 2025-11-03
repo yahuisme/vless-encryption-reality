@@ -1,13 +1,17 @@
 #!/bin/bash
 
 # VLESS Encryption + REALITY 一键安装管理脚本
-# 版本: V1.7.1
+# 版本: V1.7.2 (安全及逻辑修复)
+# 更新日志 (V1.7.2):
+# - [修复] 修复 "修改配置" 时会重置所有密钥导致客户端失效的Bug
+# - [安全] 优化官方脚本执行方式 (预下载+内容检查)
+# - [安全] 配置文件写入后设置标准权限 (644)
 # 固定配置: VLESS Encryption (native + 0-RTT + ML-KEM-768) + REALITY + xtls-rprx-vision
 
 set -e
 
 # --- 全局变量 ---
-SCRIPT_VERSION="V1.7.1"
+SCRIPT_VERSION="V1.7.2"
 xray_config_path="/usr/local/etc/xray/config.json"
 xray_binary_path="/usr/local/bin/xray"
 xray_install_script_url="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
@@ -92,10 +96,22 @@ get_public_ip_v6() {
     echo ""
 }
 
+# [改进] 替换为更安全的脚本执行方式
 execute_official_script() {
-    info "正在执行官方安装脚本..."
-    # 使用 "$@" 以便将所有参数正确地传递给子脚本
-    curl -sL "$xray_install_script_url" | bash -s -- "$@"
+    info "正在下载官方安装脚本..."
+    local args=("$@") # 将所有参数存入数组
+    local script_content
+    script_content=$(curl -sL "$xray_install_script_url")
+
+    # 安全增强：检查脚本内容
+    if [[ -z "$script_content" || ! "$script_content" =~ "install-release" ]]; then
+        error "下载 Xray 官方安装脚本失败或内容异常！请检查网络连接。"
+        return 1
+    fi
+    
+    info "正在执行官方安装脚本 ( ${args[*]} )..."
+    # 使用 "$@" 将参数正确传递
+    echo "$script_content" | bash -s -- "$@"
 }
 
 check_xray_version() {
@@ -401,6 +417,7 @@ view_xray_log() {
     journalctl -u xray -f --no-pager
 }
 
+# [改进] 替换为修复Bug的 modify_config 函数
 modify_config() {
     if [ ! -f "$xray_config_path" ]; then
         error "错误: Xray 未安装。"
@@ -416,6 +433,30 @@ modify_config() {
     current_sni=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$xray_config_path")
     local current_short_id
     current_short_id=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$xray_config_path")
+
+    # [FIX] 从配置文件和信息文件读取现有的密钥，而不是重新生成
+    info "正在读取现有的密钥信息..."
+    local current_decryption_config
+    current_decryption_config=$(jq -r '.inbounds[0].settings.decryption' "$xray_config_path")
+    local current_private_key
+    current_private_key=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$xray_config_path")
+    
+    if [ ! -f "$client_encryption_info_file" ] || [ ! -f "$client_reality_info_file" ]; then
+        error "错误: 找不到客户端信息文件，无法保留密钥。请重新安装。"
+        return
+    fi
+    local current_encryption_config
+    current_encryption_config=$(cat "$client_encryption_info_file")
+    local reality_info
+    reality_info=$(cat "$client_reality_info_file")
+    local current_public_key
+    current_public_key=$(echo "$reality_info" | cut -d'|' -f1)
+    
+    # 检查是否成功读取
+    if [ -z "$current_decryption_config" ] || [ -z "$current_private_key" ] || [ -z "$current_encryption_config" ] || [ -z "$current_public_key" ]; then
+        error "读取现有密钥失败！请重新安装以修复。"
+        return
+    fi
 
     info "请输入新配置，回车则保留当前值。"
     local port uuid sni short_id
@@ -439,24 +480,8 @@ modify_config() {
     read -r short_id
     [ -z "$short_id" ] && short_id=$current_short_id
 
-    local encryption_info
-    encryption_info=$(generate_vless_encryption_config)
-    if [ -z "$encryption_info" ]; then return 1; fi
-
-    local reality_keys
-    reality_keys=$(generate_reality_keys)
-    if [ -z "$reality_keys" ]; then return 1; fi
-
-    local decryption_config
-    decryption_config=$(echo "$encryption_info" | cut -d'|' -f1)
-    local encryption_config
-    encryption_config=$(echo "$encryption_info" | cut -d'|' -f2)
-    local private_key
-    private_key=$(echo "$reality_keys" | cut -d'|' -f1)
-    local public_key
-    public_key=$(echo "$reality_keys" | cut -d'|' -f2)
-
-    write_config "$port" "$uuid" "$decryption_config" "$encryption_config" "$private_key" "$public_key" "$sni" "$short_id"
+    # [FIX] 使用读取到的现有密钥，结合用户输入的新配置，写入文件
+    write_config "$port" "$uuid" "$current_decryption_config" "$current_encryption_config" "$current_private_key" "$current_public_key" "$sni" "$short_id"
     
     if ! restart_xray; then
         return
@@ -547,6 +572,7 @@ view_subscription_info() {
     fi
 }
 
+# [改进] 替换为带权限设置的 write_config 函数
 write_config() {
     local port="$1" uuid="$2" decryption_config="$3" encryption_config="$4"
     local private_key="$5" public_key="$6" sni="$7" short_id="$8"
@@ -598,6 +624,10 @@ write_config() {
             }
         }]
     }' > "$xray_config_path"
+
+    # [改进] 确保配置文件权限正确
+    chmod 644 "$xray_config_path"
+    chown root:root "$xray_config_path"
 }
 
 run_install() {
@@ -701,8 +731,8 @@ show_help() {
     echo "Xray VLESS-Encryption + REALITY + Vision 一键脚本 v${SCRIPT_VERSION}"
     echo
     echo "用法:"
-    echo "  $0                # 显示交互式菜单"
-    echo "  $0 install [选项]   # 以无交互方式安装"
+    echo "  $0                 # 显示交互式菜单"
+    echo "  $0 install [选项]    # 以无交互方式安装"
     echo
     echo "安装选项:"
     echo "  --port <端口>      # 监听端口 (默认: 443)"
