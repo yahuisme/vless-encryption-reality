@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # VLESS Encryption + REALITY 一键安装管理脚本
-# 版本: V1.7.2 (安全及逻辑修复)
-# 更新日志 (V1.7.2):
+# 版本: V1.7.3 (UI颜色调整)
+# 更新日志 (V1.7.3):
+# - [UI] 调整菜单和输出颜色 (紫色 -> 绿色)
 # - [修复] 修复 "修改配置" 时会重置所有密钥导致客户端失效的Bug
 # - [安全] 优化官方脚本执行方式 (预下载+内容检查)
 # - [安全] 配置文件写入后设置标准权限 (644)
@@ -11,7 +12,7 @@
 set -e
 
 # --- 全局变量 ---
-SCRIPT_VERSION="V1.7.2"
+SCRIPT_VERSION="V1.7.3"
 xray_config_path="/usr/local/etc/xray/config.json"
 xray_binary_path="/usr/local/bin/xray"
 xray_install_script_url="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
@@ -551,18 +552,21 @@ view_subscription_info() {
         echo "${vless_url}" > "$client_vless_link_file"
         echo "----------------------------------------------------------------"
         cecho "$C_CYAN" " --- Xray VLESS-Encryption + REALITY + Vision 订阅信息 --- "
-        echo " 节点名称: $(cecho "$C_PURPLE" "$link_name_raw")"
-        if [ -n "$ip4" ]; then echo " 地址(IPv4): $(cecho "$C_PURPLE" "$ip4")"; fi
-        if [ -n "$ip6" ]; then echo " 地址(IPv6): $(cecho "$C_PURPLE" "$ip6")"; fi
-        echo " 端口: $(cecho "$C_PURPLE" "$port")"
-        echo " UUID: $(cecho "$C_PURPLE" "$uuid")"
-        echo " PublicKey: $(cecho "$C_PURPLE" "$public_key")"
+        
+        # [修改] C_PURPLE -> C_GREEN
+        echo " 节点名称: $(cecho "$C_GREEN" "$link_name_raw")"
+        if [ -n "$ip4" ]; then echo " 地址(IPv4): $(cecho "$C_GREEN" "$ip4")"; fi
+        if [ -n "$ip6" ]; then echo " 地址(IPv6): $(cecho "$C_GREEN" "$ip6")"; fi
+        echo " 端口: $(cecho "$C_GREEN" "$port")"
+        echo " UUID: $(cecho "$C_GREEN" "$uuid")"
+        echo " PublicKey: $(cecho "$C_GREEN" "$public_key")"
         echo " 协议: $(cecho "$C_YELLOW" "VLESS Encryption")"
         echo " 安全类型: $(cecho "$C_YELLOW" "reality")"
         echo " 流控: $(cecho "$C_YELLOW" "xtls-rprx-vision")"
         echo " 指纹: $(cecho "$C_YELLOW" "chrome")"
-        echo " SNI: $(cecho "$C_PURPLE" "$sni")"
-        echo " Short ID: $(cecho "$C_PURPLE" "$short_id")"
+        echo " SNI: $(cecho "$C_GREEN" "$sni")"
+        echo " Short ID: $(cecho "$C_GREEN" "$short_id")"
+        
         echo "----------------------------------------------------------------"
         cecho "$C_GREEN" " 订阅链接 (已保存到 $client_vless_link_file): "
         echo
@@ -695,13 +699,16 @@ main_menu() {
         check_xray_status
         echo "  ${xray_status_info}"
         cecho "$C_GREEN"  "────────────────────────────────────────────────────────"
-        cecho "$C_PURPLE" "  1. 安装/重装 Xray (VLESS-Encryption + REALITY + Vision)"
-        cecho "$C_PURPLE" "  2. 更新 Xray"
-        cecho "$C_PURPLE" "  3. 重启 Xray"
-        cecho "$C_PURPLE" "  4. 卸载 Xray"
-        cecho "$C_PURPLE" "  5. 查看 Xray 日志"
-        cecho "$C_PURPLE" "  6. 修改节点配置"
-        cecho "$C_PURPLE" "  7. 查看订阅信息"
+        
+        # [修改] C_PURPLE -> C_GREEN
+        cecho "$C_GREEN" "  1. 安装/重装 Xray (VLESS-Encryption + REALITY + Vision)"
+        cecho "$C_GREEN" "  2. 更新 Xray"
+        cecho "$C_GREEN" "  3. 重启 Xray"
+        cecho "$C_GREEN" "  4. 卸载 Xray"
+        cecho "$C_GREEN" "  5. 查看 Xray 日志"
+        cecho "$C_GREEN" "  6. 修改节点配置"
+        cecho "$C_GREEN" "  7. 查看订阅信息"
+        
         cecho "$C_GREEN"  "────────────────────────────────────────────────────────"
         cecho "$C_RED"    "  0. 退出脚本"
         cecho "$C_GREEN"  "────────────────────────────────────────────────────────"
